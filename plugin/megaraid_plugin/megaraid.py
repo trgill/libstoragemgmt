@@ -325,6 +325,10 @@ class MegaRAID(IPlugin):
         "/opt/hpe/storcli/storcli64"
     ]
     _CMD_JSON_OUTPUT_SWITCH = 'J'
+    # HBA-mode controllers (e.g. Dell HBA355i) reject RAID commands with a
+    # 'Failure' status carrying only a Description, no 'Detailed Status'.
+    _UNSUPPORTED_CMD_REGEX = re.compile(r'un-?supported\s+command',
+                                        re.IGNORECASE)
 
     def __init__(self):
         self._storcli_bin = None
@@ -466,10 +470,14 @@ class MegaRAID(IPlugin):
                         ErrorNumber.PLUGIN_BUG,
                         "MegaRAID storcli failed with error %d: %s" %
                         (detail_status['ErrCd'], detail_status['ErrMsg']))
-                raise LsmError(
-                    ErrorNumber.PLUGIN_BUG,
-                    "MegaRAID storcli failed: %s" %
-                    rc_status.get('Description', 'Unknown error'))
+                description = rc_status.get('Description', 'Unknown error')
+                if MegaRAID._UNSUPPORTED_CMD_REGEX.search(description):
+                    raise LsmError(
+                        ErrorNumber.NO_SUPPORT,
+                        "MegaRAID storcli command not supported by this "
+                        "controller: %s" % description)
+                raise LsmError(ErrorNumber.PLUGIN_BUG,
+                               "MegaRAID storcli failed: %s" % description)
             real_data = ctrl_output[0].get('Response Data', {})
             if real_data and 'Response Data' in list(real_data.keys()):
                 return real_data['Response Data']
@@ -477,6 +485,23 @@ class MegaRAID(IPlugin):
             return real_data
         else:
             return output
+
+    def _storcli_exec_optional(self, storcli_cmds, flag_json=True):
+        """
+        Same as _storcli_exec() but return None when the controller does not
+        implement the command, which is the normal case for HBA-mode
+        controllers and for RAID controllers without a battery or capacitor.
+        Every other failure is raised so a genuine storcli problem is not
+        silently turned into an empty result.
+        """
+        try:
+            return self._storcli_exec(storcli_cmds, flag_json)
+        except ExecError:
+            return None
+        except LsmError as lsm_err:
+            if lsm_err.code == ErrorNumber.NO_SUPPORT:
+                return None
+            raise
 
     def _ctrl_count(self):
         ctrl_count = self._storcli_exec(["show",
@@ -705,16 +730,12 @@ class MegaRAID(IPlugin):
         for ctrl_num in range(self._ctrl_count()):
             cc_vd_ids = []
             cc_dg_ids = []
-            try:
-                dg_show_output = self._storcli_exec(
-                    ["/c%d/dall" % ctrl_num, "show", "all"])
-            except (ExecError, LsmError):
+            dg_show_output = self._storcli_exec_optional(
+                ["/c%d/dall" % ctrl_num, "show", "all"])
+            if not dg_show_output:
                 continue
-            try:
-                consist_check_output = self._storcli_exec(
-                    ["/c%d/vall" % ctrl_num, "show", "cc"])
-            except (ExecError, LsmError):
-                consist_check_output = {}
+            consist_check_output = self._storcli_exec_optional(
+                ["/c%d/vall" % ctrl_num, "show", "cc"]) or {}
             free_space_list = dg_show_output.get("FREE SPACE DETAILS", [])
 
             if "TOPOLOGY" not in dg_show_output:
@@ -771,14 +792,11 @@ class MegaRAID(IPlugin):
                 flags=Client.FLAG_RSVD):
         lsm_vols = []
         for ctrl_num in range(self._ctrl_count()):
-            try:
-                vol_show_output = self._storcli_exec(
-                    ["/c%d/vall" % ctrl_num, "show", "all"])
-            except (ExecError, LsmError):
+            vol_show_output = self._storcli_exec_optional(
+                ["/c%d/vall" % ctrl_num, "show", "all"])
+            if not vol_show_output:
                 continue
             sys_id = self._sys_id_of_ctrl_num(ctrl_num)
-            if vol_show_output is None or len(vol_show_output) == 0:
-                continue
             for key_name in list(vol_show_output.keys()):
                 if key_name.startswith('/c'):
                     vd_basic_info = vol_show_output[key_name][0]
@@ -1080,21 +1098,15 @@ class MegaRAID(IPlugin):
                 ["/c%d" % ctrl_num, "show", "all"])
             sys_id = self._sys_id_of_ctrl_num(ctrl_num, ctrl_show_all_output)
 
-            try:
-                bbu_show_all_output = self._storcli_exec(
-                    ["/c%d/bbu" % ctrl_num, "show", "all"])
-            except (ExecError, LsmError):
-                bbu_show_all_output = None
+            bbu_show_all_output = self._storcli_exec_optional(
+                ["/c%d/bbu" % ctrl_num, "show", "all"])
 
             if bbu_show_all_output:
                 lsm_bats.append(_mega_bbu_to_lsm(sys_id, bbu_show_all_output))
 
             # Capacitor
-            try:
-                cv_show_all_output = self._storcli_exec(
-                    ["/c%d/cv" % ctrl_num, "show", "all"])
-            except (ExecError, LsmError):
-                cv_show_all_output = None
+            cv_show_all_output = self._storcli_exec_optional(
+                ["/c%d/cv" % ctrl_num, "show", "all"])
 
             if cv_show_all_output:
                 lsm_bats.append(_mega_cv_to_lsm(sys_id, cv_show_all_output))
