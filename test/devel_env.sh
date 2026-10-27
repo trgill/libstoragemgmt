@@ -10,6 +10,7 @@
 # Usage:
 #   source test/devel_env.sh     # sets env vars, starts daemon
 #   lsmcli list --type systems   # use lsmcli normally
+#   lsmcli capabilities --sys    # TAB completes, values come from the sim
 #   devel_env_stop               # tear down when done
 
 # ---------------------------------------------------------------------------
@@ -213,6 +214,9 @@ _DEVEL_HAD_LSM_SIM_TIME="${LSM_SIM_TIME+yes}"
 _DEVEL_ORIG_LSM_SIM_TIME="${LSM_SIM_TIME-}"
 _DEVEL_HAD_LSMCLI_URI="${LSMCLI_URI+yes}"
 _DEVEL_ORIG_LSMCLI_URI="${LSMCLI_URI-}"
+_DEVEL_HAD_LSMCLI_AUTO_COMPLETE_VALUE="${LSMCLI_AUTO_COMPLETE_VALUE+yes}"
+_DEVEL_ORIG_LSMCLI_AUTO_COMPLETE_VALUE="${LSMCLI_AUTO_COMPLETE_VALUE-}"
+_DEVEL_ORIG_LSMCLI_COMPLETE="$(complete -p lsmcli 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
 # Export environment variables
@@ -226,6 +230,12 @@ export LSM_TEST_CFG_DIR="$DEVEL_BASE/config/"
 export LSM_SIM_TIME=0.1
 export LSMCLI_URI="sim://"
 
+# Let TAB completion look up systems, pools, volumes and so on. Off by
+# default for installed systems because the lookups can be slow against a
+# real array, which is not a concern against the simulator. Set it to 0
+# before sourcing this script to keep it off.
+export LSMCLI_AUTO_COMPLETE_VALUE="${LSMCLI_AUTO_COMPLETE_VALUE:-1}"
+
 # For the C unit test runner
 export G_SLICE=always-malloc
 export G_DEBUG=gc-friendly
@@ -234,6 +244,15 @@ export CK_FORK=no
 
 # Put our bin dir first on PATH
 export PATH="$DEVEL_BASE/bin:$PATH"
+
+# ---------------------------------------------------------------------------
+# Bash completion for lsmcli, from the source tree rather than any installed
+# copy. LSMCLI_AUTO_COMPLETE_VALUE is read as the script is sourced, so it
+# has to be exported above this point.
+# ---------------------------------------------------------------------------
+if [ -r "$_DEVEL_SRC_DIR/tools/bash_completion/lsmcli" ]; then
+    source "$_DEVEL_SRC_DIR/tools/bash_completion/lsmcli"
+fi
 
 # ---------------------------------------------------------------------------
 # Start the daemon (-d = don't fork, we background it with &)
@@ -292,6 +311,17 @@ devel_env_stop() {
         echo "Removed $DEVEL_BASE"
     fi
     unset DEVEL_BASE
+
+    # Drop the completion we sourced, putting back whatever was bound to
+    # lsmcli before, eg. an installed completion script.
+    complete -r lsmcli 2>/dev/null
+    if [ -n "${_DEVEL_ORIG_LSMCLI_COMPLETE-}" ]; then
+        eval "$_DEVEL_ORIG_LSMCLI_COMPLETE"
+    fi
+    unset -f _lsm join listcontains possible_args arg_index lsm_values \
+        2>/dev/null
+    unset potential_args NO_VALUE_LOOKUP _DEVEL_ORIG_LSMCLI_COMPLETE
+
     if [ -n "${_DEVEL_ORIG_PATH+set}" ]; then
         export PATH="$_DEVEL_ORIG_PATH"
         if [ "$_DEVEL_HAD_PYTHONPATH" = "yes" ]; then
@@ -334,6 +364,11 @@ devel_env_stop() {
         else
             unset LSMCLI_URI
         fi
+        if [ "$_DEVEL_HAD_LSMCLI_AUTO_COMPLETE_VALUE" = "yes" ]; then
+            export LSMCLI_AUTO_COMPLETE_VALUE="$_DEVEL_ORIG_LSMCLI_AUTO_COMPLETE_VALUE"
+        else
+            unset LSMCLI_AUTO_COMPLETE_VALUE
+        fi
         unset _DEVEL_ORIG_PATH \
               _DEVEL_HAD_PYTHONPATH _DEVEL_ORIG_PYTHONPATH \
               _DEVEL_HAD_LD_LIBRARY_PATH _DEVEL_ORIG_LD_LIBRARY_PATH \
@@ -342,7 +377,9 @@ devel_env_stop() {
               _DEVEL_HAD_LSM_TEST_RUNDIR _DEVEL_ORIG_LSM_TEST_RUNDIR \
               _DEVEL_HAD_LSM_TEST_CFG_DIR _DEVEL_ORIG_LSM_TEST_CFG_DIR \
               _DEVEL_HAD_LSM_SIM_TIME _DEVEL_ORIG_LSM_SIM_TIME \
-              _DEVEL_HAD_LSMCLI_URI _DEVEL_ORIG_LSMCLI_URI
+              _DEVEL_HAD_LSMCLI_URI _DEVEL_ORIG_LSMCLI_URI \
+              _DEVEL_HAD_LSMCLI_AUTO_COMPLETE_VALUE \
+              _DEVEL_ORIG_LSMCLI_AUTO_COMPLETE_VALUE
     fi
 }
 
@@ -356,6 +393,10 @@ devel_env_show() {
     echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
     echo "LSM_UDS_PATH:    $LSM_UDS_PATH"
     echo "LSMCLI_URI:      $LSMCLI_URI"
+    if complete -p lsmcli > /dev/null 2>&1; then
+        echo "TAB completion:  on, value look-up" \
+             "LSMCLI_AUTO_COMPLETE_VALUE=$LSMCLI_AUTO_COMPLETE_VALUE"
+    fi
     echo ""
     echo "Installed plugins:"
     ls -1 "$DEVEL_BASE/plugins/"
