@@ -314,10 +314,12 @@ devel_env_stop() {
 
     # Drop the completion we sourced, putting back whatever was bound to
     # lsmcli before, eg. an installed completion script.
-    complete -r lsmcli 2>/dev/null
+    # Note: restore the original completion _before_ unsetting our functions,
+    # in case the restored completion depends on them.
     if [ -n "${_DEVEL_ORIG_LSMCLI_COMPLETE-}" ]; then
         eval "$_DEVEL_ORIG_LSMCLI_COMPLETE"
     fi
+    complete -r lsmcli 2>/dev/null
     unset -f _lsm join listcontains possible_args arg_index lsm_values \
         2>/dev/null
     unset potential_args NO_VALUE_LOOKUP _DEVEL_ORIG_LSMCLI_COMPLETE

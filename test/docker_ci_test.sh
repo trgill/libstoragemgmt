@@ -84,7 +84,11 @@ V=1 make || exit 1
 # whichever directory failed. Without it only the top level log was shown,
 # which says nothing about a test that failed further down the tree.
 V=1 VERBOSE=1 make check || {
-    find . -name test-suite.log -printf '\n===== %p =====\n' -exec cat {} +
+    find . -name test-suite.log | while read -r logfile; do
+        echo ""
+        echo "===== $logfile ====="
+        cat "$logfile"
+    done
     exit 1
 }
 

@@ -80,9 +80,15 @@ export PATH="${stage_dir}:${PATH}"
 export LSMCLI_AUTO_COMPLETE_VALUE=1
 unset LSMCLI_PASSWORD
 
-if ! lsmcli list --type systems -t'#' > /dev/null 2>&1 ; then
-    echo "Skipping: cannot talk to the simulator plugin"
-    lsmcli list --type systems -t'#'
+if ! output=$(lsmcli list --type systems -t'#' 2>&1) ; then
+    echo "FAIL: cannot talk to the simulator plugin"
+    echo "lsmcli output:"
+    echo "$output"
+    exit 1
+fi
+
+if [[ -z "$output" ]] ; then
+    echo "Skipping: simulator returned no systems"
     exit ${SKIP}
 fi
 
