@@ -216,7 +216,7 @@ _DEVEL_HAD_LSMCLI_URI="${LSMCLI_URI+yes}"
 _DEVEL_ORIG_LSMCLI_URI="${LSMCLI_URI-}"
 _DEVEL_HAD_LSMCLI_AUTO_COMPLETE_VALUE="${LSMCLI_AUTO_COMPLETE_VALUE+yes}"
 _DEVEL_ORIG_LSMCLI_AUTO_COMPLETE_VALUE="${LSMCLI_AUTO_COMPLETE_VALUE-}"
-_DEVEL_ORIG_LSMCLI_COMPLETE="$(complete -p lsmcli 2>/dev/null)"
+_DEVEL_ORIG_LSMCLI_COMPLETE="$(complete -p lsmcli 2>/dev/null || true)"
 
 # ---------------------------------------------------------------------------
 # Export environment variables

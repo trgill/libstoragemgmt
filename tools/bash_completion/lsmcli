@@ -77,17 +77,10 @@ function lsm_values()
     # values keep any spaces they contain.
     while IFS="${sep}" read -r -a fields ; do
         item="${fields[column-1]:-}"
-        # For fields with multiple comma-separated values, split and apply prefix matching to each
-        if [[ "$item" == *","* ]]; then
-            local -a candidates
-            IFS=',' read -ra candidates <<< "$item"
-            for candidate in "${candidates[@]}"; do
-                candidate="${candidate// /}"  # trim spaces
-                [[ -n ${candidate} && ${candidate} == "${cur}"* ]] && COMPREPLY+=("${candidate}")
-            done
-        else
-            [[ -n ${item} && ${item} == "${cur}"* ]] && COMPREPLY+=("${item}")
-        fi
+        # Trim leading and trailing whitespace only; preserve internal spaces
+        item="${item#"${item%%[![:space:]]*}"}"
+        item="${item%"${item##*[![:space:]]}"}"
+        [[ -n ${item} && ${item} == "${cur}"* ]] && COMPREPLY+=("${item}")
     done < <(lsmcli list --type "${list_type}" -t"${sep}" "$@")
 }
 
