@@ -498,4 +498,4 @@ function _lsm()
         fi
     fi
 }
-complete -F _lsm lsmcli
+complete -o fullquote -F _lsm lsmcli
